@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Set up 2FA - {{ app_name }}{% endblock %}
+
+{% block content %}
+<section class="content" aria-label="Two-factor setup">
+  {% include "partials/flashes.html" %}
+
+  <div class="page-head">
+    <h1 class="page-title">Set up two-factor authentication</h1>
+  </div>
+
+  <div class="card setup-card">
+    <ol class="steps">
+      <li>Scan this QR code with your authenticator app.</li>
+      <li>Enter the 6-digit code it shows to confirm.</li>
+    </ol>
+
+    <div class="qr-wrap">
+      <div class="qr">{{ qr_svg|safe }}</div>
+      <div class="qr-manual">
+        <p class="muted">Cannot scan? Enter this key manually:</p>
+        <code class="secret-code">{{ secret }}</code>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('dashboard.two_factor_enable') }}" class="form form--narrow">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="field">
+        <span class="field__label">Verification code</span>
+        <input class="field__input field__input--code" type="text" name="code"
+               inputmode="numeric" pattern="[0-9]*" maxlength="6"
+               autocomplete="one-time-code" placeholder="000000" required autofocus>
+      </label>
+      <div class="form__actions">
+        <button class="btn btn--primary" type="submit">Enable 2FA</button>
+        <a class="btn btn--ghost" href="{{ url_for('dashboard.settings') }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Two-factor authentication - {{ app_name }}{% endblock %}
+
+{% block auth_content %}
+<div class="card auth-card">
+  <h1 class="auth-card__title">Two-factor authentication</h1>
+  <p class="auth-card__subtitle">
+    Enter the 6-digit code from your authenticator app.
+  </p>
+
+  <form method="post" action="{{ url_for('auth.two_factor') }}" class="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label class="field">
+      <span class="field__label">Authentication code</span>
+      <input class="field__input field__input--code" type="text" name="code"
+             inputmode="numeric" pattern="[0-9]*" maxlength="6"
+             autocomplete="one-time-code" placeholder="000000" required autofocus>
+    </label>
+
+    <button class="btn btn--primary btn--block" type="submit">Verify</button>
+  </form>
+
+  <p class="auth-card__switch">
+    <a href="{{ url_for('auth.login') }}">Back to sign in</a>
+  </p>
+</div>
+{% endblock %}

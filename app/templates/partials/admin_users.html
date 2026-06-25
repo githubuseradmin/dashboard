@@ -1,0 +1,107 @@
+<section id="main" class="content" aria-label="Admin">
+  {% include "partials/flashes.html" %}
+
+  <div class="page-head">
+    <h1 class="page-title">Admin</h1>
+    <p class="page-subtitle">Manage accounts and review activity.</p>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-card__label">Total users</div>
+      <div class="stat-card__value">{{ stats.total_users }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__label">Active users</div>
+      <div class="stat-card__value">{{ stats.active_users }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__label">Open tickets</div>
+      <div class="stat-card__value">{{ stats.open_tickets }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__label">2FA enabled</div>
+      <div class="stat-card__value">{{ stats.two_factor_users }}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card__head">
+      <h2 class="card__title">Users</h2>
+      <form class="search" method="get" action="{{ url_for('admin.index') }}"
+            hx-get="{{ url_for('admin.index') }}" hx-target="#main"
+            hx-select="#main" hx-swap="outerHTML" hx-push-url="true">
+        <input class="search__input" type="search" name="q" value="{{ query }}"
+               placeholder="Search by name, username or email">
+        <button class="btn btn--ghost" type="submit">Search</button>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th class="table__actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr class="{{ 'is-inactive' if not u.is_active }}">
+            <td>
+              <div class="cell-user">
+                <span class="avatar avatar--sm">{{ u.initials }}</span>
+                <div>
+                  <div class="cell-user__name">{{ u.name }}</div>
+                  <div class="cell-user__handle">@{{ u.username }}</div>
+                </div>
+              </div>
+            </td>
+            <td class="muted">{{ u.email }}</td>
+            <td>
+              <form method="post" action="{{ url_for('admin.change_role', user_id=u.id) }}"
+                    class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <select class="select" name="role" onchange="this.form.submit()"
+                        {{ 'disabled' if u.id == current_user.id }}>
+                  {% for role in roles %}
+                  <option value="{{ role.value }}" {{ 'selected' if role == u.role }}>
+                    {{ role.label }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </form>
+            </td>
+            <td>
+              {% if u.is_active %}
+              <span class="badge badge--success">Active</span>
+              {% else %}
+              <span class="badge badge--muted">Inactive</span>
+              {% endif %}
+            </td>
+            <td class="table__actions">
+              {% if u.id != current_user.id %}
+              <form method="post" action="{{ url_for('admin.toggle_active', user_id=u.id) }}"
+                    class="inline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn--sm {{ 'btn--danger' if u.is_active else 'btn--ghost' }}"
+                        type="submit">
+                  {{ 'Deactivate' if u.is_active else 'Activate' }}
+                </button>
+              </form>
+              {% else %}
+              <span class="muted">You</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty">No users match your search.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

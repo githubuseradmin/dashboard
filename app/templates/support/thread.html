@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.subject }} - {{ app_name }}{% endblock %}
+
+{% block content %}
+<section class="content" aria-label="Ticket thread">
+  {% include "partials/flashes.html" %}
+
+  <div class="page-head">
+    <div>
+      <a class="link link--back" href="{{ url_for('support.index') }}">&larr; Back to support</a>
+      <h1 class="page-title">{{ ticket.subject }}</h1>
+      <p class="page-subtitle">
+        Opened by {{ ticket.user.name }} on {{ ticket.created_at.strftime('%Y-%m-%d %H:%M') }}
+      </p>
+    </div>
+    <span class="badge badge--status badge--{{ ticket.status.value }}">{{ ticket.status.label }}</span>
+  </div>
+
+  <div class="thread">
+    {% for message in ticket.messages %}
+    <div class="msg {{ 'msg--staff' if message.is_staff_reply else 'msg--user' }}">
+      <div class="msg__head">
+        <span class="avatar avatar--sm">{{ message.author.initials }}</span>
+        <span class="msg__author">{{ message.author.name }}</span>
+        {% if message.is_staff_reply %}<span class="badge badge--role">Staff</span>{% endif %}
+        <time class="msg__time muted">{{ message.created_at.strftime('%Y-%m-%d %H:%M') }}</time>
+      </div>
+      <div class="msg__body">{{ message.body }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if ticket.status.value != 'closed' %}
+  <div class="card">
+    <form method="post" action="{{ url_for('support.reply', ticket_id=ticket.id) }}" class="form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="field">
+        <span class="field__label">Add a reply</span>
+        <textarea class="field__input" name="body" rows="3" required></textarea>
+      </label>
+      <button class="btn btn--primary" type="submit">Send reply</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="card__head"><h2 class="card__title">Status</h2></div>
+    {% if is_staff %}
+    <form method="post" action="{{ url_for('support.set_status', ticket_id=ticket.id) }}"
+          class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <select class="select" name="status">
+        {% for status in statuses %}
+        <option value="{{ status.value }}" {{ 'selected' if status == ticket.status }}>
+          {{ status.label }}
+        </option>
+        {% endfor %}
+      </select>
+      <button class="btn btn--ghost" type="submit">Update status</button>
+    </form>
+    {% elif ticket.status.value != 'closed' %}
+    <form method="post" action="{{ url_for('support.set_status', ticket_id=ticket.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="status" value="closed">
+      <button class="btn btn--ghost" type="submit">Close this ticket</button>
+    </form>
+    {% else %}
+    <p class="muted">This ticket is closed.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

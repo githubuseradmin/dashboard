@@ -1,0 +1,75 @@
+<section id="main" class="content" aria-label="Support">
+  {% include "partials/flashes.html" %}
+
+  <div class="page-head">
+    <h1 class="page-title">Support</h1>
+    <p class="page-subtitle">Open a ticket and our team will get back to you.</p>
+  </div>
+
+  <div class="support-grid">
+    <div class="card">
+      <div class="card__head"><h2 class="card__title">New ticket</h2></div>
+      <form method="post" action="{{ url_for('support.create') }}" class="form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="field">
+          <span class="field__label">Subject</span>
+          <input class="field__input" type="text" name="subject" maxlength="160" required>
+        </label>
+        <label class="field">
+          <span class="field__label">Message</span>
+          <textarea class="field__input" name="body" rows="4" required></textarea>
+        </label>
+        <button class="btn btn--primary" type="submit">Submit ticket</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card__head"><h2 class="card__title">Your tickets</h2></div>
+      {% if my_tickets %}
+      <ul class="ticket-list">
+        {% for t in my_tickets %}
+        <li class="ticket-list__item">
+          <a class="ticket-list__link" href="{{ url_for('support.view', ticket_id=t.id) }}">
+            <span class="ticket-list__subject">{{ t.subject }}</span>
+            <span class="badge badge--status badge--{{ t.status.value }}">{{ t.status.label }}</span>
+          </a>
+          <time class="muted">{{ t.created_at.strftime('%Y-%m-%d') }}</time>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="empty">You have not opened any tickets yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if is_staff %}
+  <div class="card">
+    <div class="card__head">
+      <h2 class="card__title">Open tickets (staff queue)</h2>
+      <span class="badge badge--muted">{{ staff_tickets|length }}</span>
+    </div>
+    {% if staff_tickets %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Subject</th><th>Requester</th><th>Status</th><th>Opened</th></tr>
+        </thead>
+        <tbody>
+          {% for t in staff_tickets %}
+          <tr>
+            <td><a class="link" href="{{ url_for('support.view', ticket_id=t.id) }}">{{ t.subject }}</a></td>
+            <td class="muted">{{ t.user.name }}</td>
+            <td><span class="badge badge--status badge--{{ t.status.value }}">{{ t.status.label }}</span></td>
+            <td class="muted">{{ t.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty">The queue is clear. No open tickets.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>

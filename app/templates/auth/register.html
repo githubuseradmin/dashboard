@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Create account - {{ app_name }}{% endblock %}
+
+{% block auth_content %}
+<div class="card auth-card">
+  <h1 class="auth-card__title">Create your account</h1>
+  <p class="auth-card__subtitle">Join {{ app_name }} in a few seconds.</p>
+
+  <form method="post" action="{{ url_for('auth.register') }}" class="form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <label class="field">
+      <span class="field__label">Email</span>
+      <input class="field__input" type="email" name="email" autocomplete="email"
+             value="{{ email|default('') }}" required autofocus>
+    </label>
+
+    <label class="field">
+      <span class="field__label">Username</span>
+      <input class="field__input" type="text" name="username" autocomplete="username"
+             value="{{ username|default('') }}" required>
+      <span class="field__hint">3-80 characters: letters, digits, '.', '_' or '-'.</span>
+    </label>
+
+    <label class="field">
+      <span class="field__label">Password</span>
+      <input class="field__input" type="password" name="password"
+             autocomplete="new-password" required>
+      <span class="field__hint">At least 8 characters.</span>
+    </label>
+
+    <label class="field">
+      <span class="field__label">Confirm password</span>
+      <input class="field__input" type="password" name="confirm"
+             autocomplete="new-password" required>
+    </label>
+
+    <button class="btn btn--primary btn--block" type="submit">Create account</button>
+  </form>
+
+  <p class="auth-card__switch">
+    Already have an account? <a href="{{ url_for('auth.login') }}">Sign in</a>
+  </p>
+</div>
+{% endblock %}

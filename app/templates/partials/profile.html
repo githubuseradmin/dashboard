@@ -1,0 +1,35 @@
+<section id="main" class="content" aria-label="Profile">
+  {% include "partials/flashes.html" %}
+
+  <div class="page-head">
+    <h1 class="page-title">Profile</h1>
+  </div>
+
+  <div class="profile-grid">
+    <div class="card profile-card">
+      <div class="avatar avatar--xl">{{ user.initials }}</div>
+      <h2 class="profile-card__name">{{ user.name }}</h2>
+      <p class="profile-card__handle">@{{ user.username }}</p>
+      <span class="badge badge--role">{{ user.role.label }}</span>
+      <dl class="profile-card__meta">
+        <div><dt>Email</dt><dd>{{ user.email }}</dd></div>
+        <div><dt>Joined</dt><dd>{{ user.created_at.strftime('%Y-%m-%d') }}</dd></div>
+        <div><dt>2FA</dt><dd>{{ 'Enabled' if user.totp_enabled else 'Disabled' }}</dd></div>
+      </dl>
+    </div>
+
+    <div class="card">
+      <div class="card__head"><h2 class="card__title">Edit profile</h2></div>
+      <form method="post" action="{{ url_for('dashboard.profile') }}" class="form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="field">
+          <span class="field__label">Display name</span>
+          <input class="field__input" type="text" name="display_name"
+                 value="{{ user.display_name|default('') }}" maxlength="120" required>
+          <span class="field__hint">This is the name shown around the dashboard.</span>
+        </label>
+        <button class="btn btn--primary" type="submit">Save changes</button>
+      </form>
+    </div>
+  </div>
+</section>

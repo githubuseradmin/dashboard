@@ -1,0 +1,31 @@
+# Core web framework
+Flask>=3.0,<4.0
+
+# Pin MarkupSafe: the 3.0.3 wheel ships a broken C extension on some
+# Python 3.14 alpha builds (escape() raises SystemError). 3.0.2 is fine and
+# fully compatible with Flask/Jinja2. Safe to relax once 3.0.4+ is released.
+MarkupSafe>=2.1,!=3.0.3,<3.1
+
+# ORM (database-agnostic; SQLite by default, MySQL via DATABASE_URL)
+SQLAlchemy>=2.0,<3.0
+
+# Password hashing. passlib drives bcrypt; a small compatibility shim in
+# app/extensions.py keeps passlib 1.7.4 working with bcrypt 5.x.
+passlib[bcrypt]>=1.7.4
+
+# Time-based one-time passwords (TOTP) for two-factor authentication
+pyotp>=2.9
+
+# QR-code generation for 2FA enrolment (pure-Python, no system deps)
+segno>=1.6
+
+# Load configuration from a local .env file
+python-dotenv>=1.0
+
+# --- Optional ---------------------------------------------------------------
+# MySQL driver. Uncomment to use a MySQL/MariaDB DATABASE_URL such as:
+#   mysql+pymysql://user:password@host:3306/dbname?charset=utf8mb4
+# PyMySQL>=1.1
+
+# Production WSGI server (Linux/macOS):
+# gunicorn>=21.2

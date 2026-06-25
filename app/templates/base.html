@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128202;</text></svg>">
+</head>
+<body>
+  {% if current_user %}
+  {# -------- Authenticated shell: top bar + sidebar + content -------- #}
+  <header class="topbar">
+    <div class="topbar__left">
+      <button class="icon-btn sidebar-toggle" aria-label="Toggle menu"
+              onclick="document.body.classList.toggle('sidebar-open')">&#9776;</button>
+      <a class="brand" href="{{ url_for('dashboard.home') }}">
+        <span class="brand__mark">&#128202;</span>
+        <span class="brand__name">{{ app_name }}</span>
+      </a>
+    </div>
+    <div class="topbar__right">
+      <button class="icon-btn" aria-label="Toggle theme" onclick="toggleTheme()" title="Toggle light/dark">
+        <span class="theme-icon">&#9788;</span>
+      </button>
+      <div class="usermenu" id="usermenu">
+        <button class="usermenu__trigger" onclick="toggleMenu(event)" aria-haspopup="true">
+          <span class="avatar">{{ current_user.initials }}</span>
+          <span class="usermenu__name">{{ current_user.name }}</span>
+          <span class="caret">&#9662;</span>
+        </button>
+        <div class="usermenu__dropdown" role="menu">
+          <div class="usermenu__header">
+            <div class="avatar avatar--lg">{{ current_user.initials }}</div>
+            <div>
+              <div class="usermenu__fullname">{{ current_user.name }}</div>
+              <div class="usermenu__email">{{ current_user.email }}</div>
+              <span class="badge badge--role">{{ current_user.role.label }}</span>
+            </div>
+          </div>
+          <a role="menuitem" href="{{ url_for('dashboard.profile') }}">Profile</a>
+          <a role="menuitem" href="{{ url_for('dashboard.settings') }}">Settings</a>
+          <form method="post" action="{{ url_for('auth.logout') }}" class="usermenu__logout">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" role="menuitem" class="linklike">Log out</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <nav class="nav" hx-boost="true" hx-target="#main" hx-select="#main" hx-swap="outerHTML">
+        {% set tab = active_tab|default('') %}
+        <a class="nav__item {{ 'is-active' if tab == 'home' }}" href="{{ url_for('dashboard.home') }}">
+          <span class="nav__icon">&#127968;</span> Home
+        </a>
+        <a class="nav__item {{ 'is-active' if tab == 'profile' }}" href="{{ url_for('dashboard.profile') }}">
+          <span class="nav__icon">&#128100;</span> Profile
+        </a>
+        <a class="nav__item {{ 'is-active' if tab == 'support' }}" href="{{ url_for('support.index') }}">
+          <span class="nav__icon">&#128172;</span> Support
+        </a>
+        <a class="nav__item {{ 'is-active' if tab == 'settings' }}" href="{{ url_for('dashboard.settings') }}">
+          <span class="nav__icon">&#9881;</span> Settings
+        </a>
+        {% if current_user.role.value in ['moderator', 'admin'] %}
+        <div class="nav__sep">Staff</div>
+        <a class="nav__item {{ 'is-active' if tab == 'admin' }}" href="{{ url_for('admin.index') }}">
+          <span class="nav__icon">&#128737;</span> Admin
+        </a>
+        {% endif %}
+      </nav>
+      <div class="sidebar__footer">
+        <span class="muted">{{ app_name }}</span>
+      </div>
+    </aside>
+
+    <main id="main" class="content">
+      {% include "partials/flashes.html" %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% else %}
+  {# -------- Public shell: centered auth card -------- #}
+  <div class="auth-shell">
+    <div class="auth-topbar">
+      <a class="brand" href="{{ url_for('auth.login') }}">
+        <span class="brand__mark">&#128202;</span>
+        <span class="brand__name">{{ app_name }}</span>
+      </a>
+      <button class="icon-btn" aria-label="Toggle theme" onclick="toggleTheme()" title="Toggle light/dark">
+        <span class="theme-icon">&#9788;</span>
+      </button>
+    </div>
+    <div class="auth-center">
+      {% include "partials/flashes.html" %}
+      {% block auth_content %}{% endblock %}
+    </div>
+  </div>
+  {% endif %}
+
+  <script src="{{ url_for('static', filename='vendor/htmx.min.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</body>
+</html>

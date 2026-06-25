@@ -1,0 +1,50 @@
+<section id="main" class="content" aria-label="Home">
+  {% include "partials/flashes.html" %}
+
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Welcome, {{ current_user.name }}</h1>
+      <p class="page-subtitle">Here is what is happening with your account.</p>
+    </div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-card__label">Open tickets</div>
+      <div class="stat-card__value">{{ stats.open_tickets }}</div>
+      <a class="stat-card__link" href="{{ url_for('support.index') }}">View support</a>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__label">Two-factor auth</div>
+      <div class="stat-card__value">{{ stats.two_factor }}</div>
+      <a class="stat-card__link" href="{{ url_for('dashboard.settings') }}">Manage</a>
+    </div>
+    <div class="stat-card">
+      <div class="stat-card__label">Your role</div>
+      <div class="stat-card__value">{{ stats.role }}</div>
+      <a class="stat-card__link" href="{{ url_for('dashboard.profile') }}">View profile</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card__head">
+      <h2 class="card__title">Recent activity</h2>
+    </div>
+    {% if events %}
+    <ul class="feed">
+      {% for event in events %}
+      <li class="feed__item">
+        <span class="feed__dot"></span>
+        <div class="feed__body">
+          <span class="feed__action">{{ event.action.replace('_', ' ')|capitalize }}</span>
+          {% if event.detail %}<span class="feed__detail">{{ event.detail }}</span>{% endif %}
+        </div>
+        <time class="feed__time">{{ event.created_at.strftime('%Y-%m-%d %H:%M') }}</time>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty">No activity yet. Your account events will appear here.</p>
+    {% endif %}
+  </div>
+</section>

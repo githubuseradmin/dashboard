@@ -1,0 +1,67 @@
+<section id="main" class="content" aria-label="Settings">
+  {% include "partials/flashes.html" %}
+
+  <div class="page-head">
+    <h1 class="page-title">Settings</h1>
+  </div>
+
+  <div class="card">
+    <div class="card__head"><h2 class="card__title">Change password</h2></div>
+    <form method="post" action="{{ url_for('dashboard.change_password') }}" class="form form--narrow">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="field">
+        <span class="field__label">Current password</span>
+        <input class="field__input" type="password" name="current_password"
+               autocomplete="current-password" required>
+      </label>
+      <label class="field">
+        <span class="field__label">New password</span>
+        <input class="field__input" type="password" name="new_password"
+               autocomplete="new-password" required>
+        <span class="field__hint">At least 8 characters.</span>
+      </label>
+      <label class="field">
+        <span class="field__label">Confirm new password</span>
+        <input class="field__input" type="password" name="confirm_password"
+               autocomplete="new-password" required>
+      </label>
+      <button class="btn btn--primary" type="submit">Update password</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card__head">
+      <h2 class="card__title">Two-factor authentication</h2>
+      {% if user.totp_enabled %}
+      <span class="badge badge--success">Enabled</span>
+      {% else %}
+      <span class="badge badge--muted">Disabled</span>
+      {% endif %}
+    </div>
+
+    {% if user.totp_enabled %}
+    <p class="muted">
+      Your account is protected with a time-based one-time password (TOTP).
+      You will be asked for a 6-digit code when you sign in.
+    </p>
+    <form method="post" action="{{ url_for('dashboard.two_factor_disable') }}" class="form form--narrow">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="field">
+        <span class="field__label">Confirm your password to disable 2FA</span>
+        <input class="field__input" type="password" name="password"
+               autocomplete="current-password" required>
+      </label>
+      <button class="btn btn--danger" type="submit">Disable 2FA</button>
+    </form>
+    {% else %}
+    <p class="muted">
+      Add an extra layer of security. You will use an authenticator app
+      (Google Authenticator, Authy, 1Password, etc.) to generate codes.
+    </p>
+    <form method="post" action="{{ url_for('dashboard.two_factor_setup') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn--primary" type="submit">Set up 2FA</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
