@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Approve sign-in - {{ app_name }}{% endblock %}
+
+{% block auth_content %}
+<style>
+  .tg-wait { margin: 1rem 0; }
+  .tg-wait__msg { display: flex; align-items: center; gap: .5rem; }
+  .tg-wait__dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent, #2f6feb); display: inline-block;
+    animation: tg-pulse 1.1s ease-in-out infinite;
+  }
+  @keyframes tg-pulse { 0%,100% { opacity: .3; transform: scale(.85); } 50% { opacity: 1; transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .tg-wait__dot { animation: none; } }
+  .tg-code { margin-top: 1rem; }
+  .tg-code summary { cursor: pointer; color: var(--muted, #667); font-size: .9rem; }
+</style>
+<div class="card auth-card">
+  <h1 class="auth-card__title">Approve sign-in</h1>
+  <p class="auth-card__subtitle">
+    We sent a confirmation to your Telegram. Tap <strong>Confirm</strong> there
+    &mdash; this page continues automatically.
+  </p>
+
+  {# Polls the status endpoint; on approval/denial the server replies with an
+     HX-Redirect header and HTMX navigates the whole page. #}
+  <div id="tg-wait"
+       class="tg-wait"
+       hx-get="{{ url_for('auth.telegram_status') }}"
+       hx-trigger="load, every 2s"
+       hx-swap="innerHTML">
+    {% include "partials/telegram_waiting.html" %}
+  </div>
+
+  <details class="tg-code">
+    <summary>Enter the code instead</summary>
+    <form method="post" action="{{ url_for('auth.telegram_code') }}" class="form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="field">
+        <span class="field__label">6-digit code from Telegram</span>
+        <input class="field__input field__input--code" type="text" name="code"
+               inputmode="numeric" pattern="[0-9]*" maxlength="6"
+               autocomplete="one-time-code" placeholder="000000" required>
+      </label>
+      <button class="btn btn--primary btn--block" type="submit">Verify code</button>
+    </form>
+  </details>
+
+  <p class="auth-card__switch">
+    <a href="{{ url_for('auth.login') }}">Cancel and start over</a>
+  </p>
+</div>
+{% endblock %}

@@ -25,6 +25,15 @@ CSS-фреймворка) и серверный рендеринг шаблон�
   - **Опциональная двухфакторная аутентификация TOTP** (Google Authenticator,
     Authy, 1Password и др.): включается в настройках через сканируемый **QR-код**
     (генерируется segno) и затем требуется вторым шагом при входе.
+- **Интеграция с Telegram (опционально)** — привязав Telegram-аккаунт, можно:
+  - **подтверждать входы** из бота (кнопки *Подтвердить / Отклонить* или
+    6-значный код) — альтернативный второй фактор;
+  - получать **уведомления** об аккаунте (новый вход, смена пароля);
+  - открывать **Telegram Mini App** с профилем, статистикой и ожидающими
+    входами (одобрение в один тап).
+  Всё выключено, пока не задан токен бота; сторона Flask использует только
+  стандартную библиотеку (без новых зависимостей), а сам бот работает отдельным
+  процессом на aiogram.
 - **Роли и контроль доступа** — четыре роли (`user`, `supporter`, `moderator`,
   `admin`), проверяемые **на стороне сервера** декораторами `login_required` /
   `role_required`. Интерфейс лишь скрывает ссылки; источник истины — сервер.
@@ -104,23 +113,31 @@ dashboard/
 │   ├── __init__.py            # create_app(): фабрика приложения
 │   ├── config.py              # Конфигурация из окружения (dev / prod / testing)
 │   ├── extensions.py          # Database (SQLAlchemy 2.x) + шим совместимости bcrypt
-│   ├── models.py              # User, SupportTicket, TicketMessage, AuditLog
+│   ├── migrate.py             # ensure_schema(): создать таблицы + добавить колонки
+│   ├── models.py              # User, SupportTicket, TicketMessage, AuditLog, LoginRequest
 │   ├── security.py            # Хеширование, TOTP, CSRF, login_required/role_required
+│   ├── telegram.py            # Telegram: HMAC initData, link-токены, отправка
 │   ├── blueprints/
-│   │   ├── auth.py            # регистрация / вход (+2FA) / выход
-│   │   ├── dashboard.py       # главная / профиль / настройки / управление 2FA
+│   │   ├── auth.py            # регистрация / вход (+2FA / +Telegram) / выход
+│   │   ├── dashboard.py       # главная / профиль / настройки / 2FA + Telegram
 │   │   ├── admin.py           # управление пользователями + статистика (для персонала)
-│   │   └── support.py         # список тикетов / тред / смена статусов
+│   │   ├── support.py         # список тикетов / тред / смена статусов
+│   │   └── telegram.py        # страница Mini App + /api/telegram (аутент. по initData)
 │   ├── templates/
 │   │   ├── base.html          # Оболочка с верхней панелью и боковым меню
-│   │   ├── auth/ dashboard/ admin/ support/ errors/
+│   │   ├── auth/ dashboard/ admin/ support/ telegram/ errors/
 │   │   └── partials/          # Фрагменты для HTMX + flash-сообщения
 │   └── static/
 │       ├── css/styles.css     # Собственная светлая/тёмная система дизайна
 │       ├── js/app.js          # Переключатель темы, меню пользователя, CSRF для HTMX
 │       └── vendor/htmx.min.js # Локальная копия HTMX (см. примечание ниже)
+├── bot/
+│   ├── run_bot.py             # бот aiogram: привязка /start, Подтвердить/Отклонить, Mini App
+│   ├── requirements.txt       # aiogram (поверх зависимостей приложения)
+│   └── README.md
 └── tests/
-    └── test_security.py       # unittest: хеширование, TOTP, CSRF, контроль ролей
+    ├── test_security.py       # unittest: хеширование, TOTP, CSRF, контроль ролей
+    └── test_telegram.py       # unittest: HMAC initData, link-токены, эндпоинты
 ```
 
 ---
@@ -207,6 +224,63 @@ Then open:           http://127.0.0.1:5000/dashboard
 
 ---
 
+## Интеграция с Telegram
+
+Привяжите Telegram-аккаунт, чтобы **подтверждать входы**, получать
+**уведомления** и пользоваться **Mini App** — всё опционально и выключено, пока
+не задан токен бота.
+
+**Как это устроено**
+
+- **Flask-приложение** само отправляет исходящие сообщения через Bot HTTP API
+  (`app/telegram.py`, стандартный `urllib`) и отдаёт Mini App по адресу
+  `/tg/app` (тот же origin, что и API, поэтому без CORS).
+- Отдельный **бот на aiogram** (`bot/run_bot.py`) обрабатывает входящее:
+  привязку аккаунта через `/start <token>`, кнопки Подтвердить/Отклонить и
+  кнопку Mini App. Он использует ту же базу и тот же `SECRET_KEY`.
+
+```mermaid
+sequenceDiagram
+    participant U as Пользователь (браузер)
+    participant W as Flask
+    participant T as Telegram
+    participant B as Бот (aiogram)
+    U->>W: POST /login (пароль верный, TG-вход включён)
+    W->>W: создаёт LoginRequest (token + 6-значный код)
+    W->>T: sendMessage "Подтвердить?" [Да][Нет] + код
+    W-->>U: редирект на страницу ожидания (HTMX опрашивает статус)
+    U->>T: жмёт «Подтвердить»
+    T->>B: callback tgl:a:<token>
+    B->>W: (общая БД) помечает запрос одобренным
+    U->>W: опрос /login/telegram/status → approved
+    W-->>U: HX-Redirect в панель (вход выполнен)
+```
+
+**Настройка**
+
+1. Создайте бота через [@BotFather](https://t.me/BotFather); скопируйте токен и
+   запомните `@username` бота.
+2. В `.env` задайте как минимум `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` и
+   общие с ботом `SECRET_KEY`/`DATABASE_URL`. Для Mini App по HTTPS укажите
+   `TELEGRAM_WEBAPP_URL=https://<домен>/tg/app`.
+3. `python seed.py` (создаст таблицу `login_requests` и добавит Telegram-колонки
+   в существующую базу «на месте»).
+4. Запустите веб-приложение (`python run.py`) и в другом терминале — бота:
+   ```bash
+   pip install -r requirements.txt -r bot/requirements.txt
+   python -m bot.run_bot
+   ```
+5. В приложении откройте **Настройки → Telegram → Привязать Telegram**, затем
+   включите *Требовать подтверждение входа через Telegram*. Подробнее — в
+   [`bot/README.md`](bot/README.md).
+
+> **Безопасность:** запросы Mini App аутентифицируются проверкой **HMAC-SHA256**
+> от `initData` Telegram (по спецификации), поэтому эти API-маршруты освобождены
+> от session-CSRF. Link-токены короткоживущие, подписаны `SECRET_KEY` и не
+> требуют хранения. Запросы на вход имеют срок жизни (`LOGIN_REQUEST_TTL`).
+
+---
+
 ## Справочник по конфигурации
 
 Все настройки задаются через окружение (см. `.env.example`):
@@ -221,6 +295,11 @@ Then open:           http://127.0.0.1:5000/dashboard
 | `SESSION_COOKIE_SECURE` | `false` (разработка)      | `true` за HTTPS, чтобы помечать cookie как Secure.  |
 | `SESSION_LIFETIME_DAYS` | `7`                       | Срок жизни сессии.                                  |
 | `HOST` / `PORT`         | `127.0.0.1` / `5000`      | Адрес привязки сервера разработки.                  |
+| `TELEGRAM_BOT_TOKEN`    | _(пусто)_                 | Токен от BotFather. Пусто = Telegram выключен.      |
+| `TELEGRAM_BOT_USERNAME` | _(пусто)_                 | `@username` бота (без @), для deep-link привязки.   |
+| `TELEGRAM_WEBAPP_URL`   | _(пусто)_                 | Публичный HTTPS-URL Mini App (например `…/tg/app`). |
+| `LOGIN_REQUEST_TTL`     | `300`                     | Секунды жизни запроса на вход через Telegram.       |
+| `TELEGRAM_LINK_TTL`     | `600`                     | Секунды жизни deep-link привязки аккаунта.          |
 
 ---
 
@@ -289,16 +368,22 @@ alpha-сборках Python 3.14. Оба примечания продублир
 python -m unittest discover -s tests -v
 ```
 
-Набор тестов (`tests/test_security.py`) использует приложение с **SQLite
-в памяти** и покрывает:
+Набор тестов использует приложение с **SQLite в памяти** и покрывает:
 
-- хеширование и проверку паролей bcrypt (соль, уникальность, отклонение
-  неверного/повреждённого),
-- генерацию секрета TOTP и проверку кодов (принимает текущий, отклоняет неверный),
-- рендеринг QR для TOTP в виде встраиваемого SVG (и не раскрывает секрет),
-- круговой обход CSRF-токена,
-- **серверный контроль `role_required`** (аноним → вход, неверная роль → 403,
-  верная роль → 200, деактивированный пользователь → выход из системы).
+- `test_security.py` —
+  - хеширование и проверку паролей bcrypt (соль, уникальность, отклонение
+    неверного/повреждённого),
+  - генерацию секрета TOTP и проверку кодов (принимает текущий, отклоняет неверный),
+  - рендеринг QR для TOTP в виде встраиваемого SVG (и не раскрывает секрет),
+  - круговой обход CSRF-токена,
+  - **серверный контроль `role_required`** (аноним → вход, неверная роль → 403,
+    верная роль → 200, деактивированный пользователь → выход из системы).
+- `test_telegram.py` —
+  - проверка **HMAC `initData`** Mini App (валидный, подделанный, неверный токен, устаревший),
+  - подписанные **link-токены** (обход, неверный секрет, подделка, истечение),
+  - генерация кода/токена входа, безопасный no-op `notify()`,
+  - эндпоинты: страница Mini App рендерится, `/api/telegram/me` отклоняет
+    отсутствие `initData` (и не блокируется CSRF).
 
 Если Flask/SQLAlchemy не установлены, можно хотя бы проверить, что все модули
 компилируются:

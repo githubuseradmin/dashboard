@@ -1,0 +1,6 @@
+# Telegram bot process (separate from the web app).
+# Install on top of the dashboard's own requirements (shared models + SQLAlchemy):
+#   pip install -r requirements.txt -r bot/requirements.txt
+#
+# aiogram 3.x — async Telegram Bot API framework.
+aiogram>=3.4,<4.0

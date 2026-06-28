@@ -64,4 +64,76 @@
     </form>
     {% endif %}
   </div>
+
+  {% if telegram_configured %}
+  <div class="card">
+    <div class="card__head">
+      <h2 class="card__title">Telegram</h2>
+      {% if user.telegram_linked %}
+      <span class="badge badge--success">Linked</span>
+      {% else %}
+      <span class="badge badge--muted">Not linked</span>
+      {% endif %}
+    </div>
+
+    {% if user.telegram_linked %}
+    <p class="muted">
+      Connected{% if user.telegram_username %} as
+      <strong>@{{ user.telegram_username }}</strong>{% endif %}. Approve sign-ins
+      with a tap and receive account notifications in Telegram.
+    </p>
+
+    <form method="post" action="{{ url_for('dashboard.telegram_toggle_login') }}" class="form form--narrow">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <p class="muted">
+        Require Telegram approval at sign-in:
+        <strong>{{ 'On' if user.telegram_login_enabled else 'Off' }}</strong>
+      </p>
+      <button class="btn {{ 'btn--ghost' if user.telegram_login_enabled else 'btn--primary' }}" type="submit">
+        {{ 'Turn off' if user.telegram_login_enabled else 'Turn on' }}
+      </button>
+    </form>
+
+    <form method="post" action="{{ url_for('dashboard.telegram_toggle_notify') }}" class="form form--narrow">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <p class="muted">
+        Notifications:
+        <strong>{{ 'On' if user.telegram_notify else 'Off' }}</strong>
+      </p>
+      <button class="btn {{ 'btn--ghost' if user.telegram_notify else 'btn--primary' }}" type="submit">
+        {{ 'Turn off' if user.telegram_notify else 'Turn on' }}
+      </button>
+    </form>
+
+    <form method="post" action="{{ url_for('dashboard.telegram_unlink') }}" class="form form--narrow">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn--danger" type="submit">Unlink Telegram</button>
+    </form>
+
+    {% elif link_url %}
+    <p class="muted">
+      Open this link in Telegram (or scan the QR) and press <strong>Start</strong>
+      to connect your account. The link expires in a few minutes.
+    </p>
+    <div class="qr-wrap">
+      <div class="qr">{{ link_qr|safe }}</div>
+      <div class="qr-manual">
+        <a class="btn btn--primary" href="{{ link_url }}" target="_blank" rel="noopener">Open in Telegram</a>
+        <p class="muted" style="margin-top:.6rem">Or copy the link:</p>
+        <code class="secret-code">{{ link_url }}</code>
+      </div>
+    </div>
+
+    {% else %}
+    <p class="muted">
+      Link your Telegram account to approve sign-ins with a tap and get security
+      notifications (new sign-ins, password changes).
+    </p>
+    <form method="post" action="{{ url_for('dashboard.telegram_link') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn--primary" type="submit">Link Telegram</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
 </section>

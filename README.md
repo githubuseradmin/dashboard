@@ -23,6 +23,15 @@ templates.
   - **Optional TOTP two-factor authentication** (Google Authenticator, Authy,
     1Password, …): enable in Settings with a scannable **QR code** (rendered by
     segno), then required as a second step at login.
+- **Telegram integration (optional)** — link a Telegram account to:
+  - **approve sign-ins** from the bot (tap *Confirm / Deny*, or type a 6-digit
+    fallback code) — an alternative second factor;
+  - receive **account notifications** (new sign-in, password change);
+  - open a **Telegram Mini App** showing your profile, stats and any pending
+    sign-ins, with one-tap approval.
+  Everything is off unless a bot token is configured; the Flask side uses only
+  the standard library (no extra dependency), and the bot runs as a separate
+  aiogram process.
 - **Roles & access control** — four roles (`user`, `supporter`, `moderator`,
   `admin`) enforced **server-side** with `login_required` / `role_required`
   decorators. The UI only hides links; the server is the source of truth.
@@ -98,23 +107,31 @@ dashboard/
 │   ├── __init__.py            # create_app(): the application factory
 │   ├── config.py              # Env-driven config (dev / prod / testing)
 │   ├── extensions.py          # SQLAlchemy 2.x Database + bcrypt compat shim
-│   ├── models.py              # User, SupportTicket, TicketMessage, AuditLog
+│   ├── migrate.py             # ensure_schema(): create tables + add new columns
+│   ├── models.py              # User, SupportTicket, TicketMessage, AuditLog, LoginRequest
 │   ├── security.py            # Hashing, TOTP, CSRF, login_required/role_required
+│   ├── telegram.py            # Telegram helpers: initData HMAC, link tokens, send
 │   ├── blueprints/
-│   │   ├── auth.py            # register / login (+2FA) / logout
-│   │   ├── dashboard.py       # home / profile / settings / 2FA management
+│   │   ├── auth.py            # register / login (+2FA / +Telegram) / logout
+│   │   ├── dashboard.py       # home / profile / settings / 2FA + Telegram mgmt
 │   │   ├── admin.py           # user management + stats (staff only)
-│   │   └── support.py         # ticket list / thread / status changes
+│   │   ├── support.py         # ticket list / thread / status changes
+│   │   └── telegram.py        # Mini App page + /api/telegram (initData-authed)
 │   ├── templates/
 │   │   ├── base.html          # Top bar + sidebar shell (and auth shell)
-│   │   ├── auth/ dashboard/ admin/ support/ errors/
+│   │   ├── auth/ dashboard/ admin/ support/ telegram/ errors/
 │   │   └── partials/          # HTMX-swappable fragments + flashes
 │   └── static/
 │       ├── css/styles.css     # Custom light/dark design system
 │       ├── js/app.js          # Theme toggle, user menu, HTMX CSRF header
 │       └── vendor/htmx.min.js # Vendored HTMX (see note below)
+├── bot/
+│   ├── run_bot.py             # aiogram bot: /start linking, Confirm/Deny, Mini App
+│   ├── requirements.txt       # aiogram (installed on top of the app's deps)
+│   └── README.md
 └── tests/
-    └── test_security.py       # unittest: hashing, TOTP, CSRF, role gating
+    ├── test_security.py       # unittest: hashing, TOTP, CSRF, role gating
+    └── test_telegram.py       # unittest: initData HMAC, link tokens, endpoints
 ```
 
 ---
@@ -201,6 +218,62 @@ No code changes are required — only the env var.
 
 ---
 
+## Telegram integration
+
+Link a Telegram account to **approve sign-ins**, get **notifications**, and use a
+**Mini App** — all optional and off until a bot token is set.
+
+**How it fits together**
+
+- The **Flask app** sends outbound messages directly over the Bot HTTP API
+  (`app/telegram.py`, standard-library `urllib`) and serves the Mini App at
+  `/tg/app` (same origin as its API, so no CORS).
+- A separate **aiogram bot** (`bot/run_bot.py`) handles inbound events: account
+  linking via `/start <token>`, the Confirm/Deny buttons, and the Mini App
+  button. It shares the same database and `SECRET_KEY`.
+
+```mermaid
+sequenceDiagram
+    participant U as User (browser)
+    participant W as Flask app
+    participant T as Telegram
+    participant B as Bot (aiogram)
+    U->>W: POST /login (password OK, TG login on)
+    W->>W: create LoginRequest (token + 6-digit code)
+    W->>T: sendMessage "Approve?" [Confirm][Deny] + code
+    W-->>U: redirect to waiting page (HTMX polls status)
+    U->>T: taps Confirm
+    T->>B: callback tgl:a:<token>
+    B->>W: (shared DB) mark request approved
+    U->>W: poll /login/telegram/status → approved
+    W-->>U: HX-Redirect to dashboard (signed in)
+```
+
+**Setup**
+
+1. Create a bot with [@BotFather](https://t.me/BotFather); copy the token and
+   note the bot's `@username`.
+2. In `.env` set (at least) `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, and a
+   `SECRET_KEY`/`DATABASE_URL` the bot will share. For the Mini App over HTTPS,
+   set `TELEGRAM_WEBAPP_URL=https://<your-domain>/tg/app`.
+3. `python seed.py` (creates the `login_requests` table and adds the Telegram
+   columns to an existing database in place).
+4. Run the web app (`python run.py`) and, in another terminal, the bot:
+   ```bash
+   pip install -r requirements.txt -r bot/requirements.txt
+   python -m bot.run_bot
+   ```
+5. In the app, open **Settings → Telegram → Link Telegram**, then enable
+   *Require Telegram approval at sign-in*. See [`bot/README.md`](bot/README.md)
+   for details.
+
+> **Security:** Mini App requests are authenticated by validating the Telegram
+> `initData` **HMAC-SHA256** (per Telegram's spec), so those API routes are
+> exempt from the session CSRF guard. Link tokens are short-lived, signed with
+> `SECRET_KEY`, and stateless. Sign-in requests expire (`LOGIN_REQUEST_TTL`).
+
+---
+
 ## Configuration reference
 
 All settings are environment-driven (see `.env.example`):
@@ -215,6 +288,11 @@ All settings are environment-driven (see `.env.example`):
 | `SESSION_COOKIE_SECURE` | `false` (dev)             | Set `true` behind HTTPS to mark cookies Secure.    |
 | `SESSION_LIFETIME_DAYS` | `7`                       | Session lifetime.                                  |
 | `HOST` / `PORT`         | `127.0.0.1` / `5000`      | Dev server bind address.                           |
+| `TELEGRAM_BOT_TOKEN`    | _(empty)_                 | BotFather token. Empty = all Telegram features off. |
+| `TELEGRAM_BOT_USERNAME` | _(empty)_                 | Bot `@username` (no @), used for the link deep link. |
+| `TELEGRAM_WEBAPP_URL`   | _(empty)_                 | Public HTTPS URL of the Mini App (e.g. `…/tg/app`). |
+| `LOGIN_REQUEST_TTL`     | `300`                     | Seconds a Telegram sign-in approval stays valid.   |
+| `TELEGRAM_LINK_TTL`     | `600`                     | Seconds an account-link deep link stays valid.     |
 
 ---
 
@@ -281,14 +359,21 @@ project robust across environments.
 python -m unittest discover -s tests -v
 ```
 
-The suite (`tests/test_security.py`) uses an **in-memory SQLite** app and covers:
+The suite uses an **in-memory SQLite** app and covers:
 
-- bcrypt password hashing and verification (salted, unique, rejects wrong/malformed),
-- TOTP secret generation and code verification (accepts current, rejects wrong),
-- TOTP QR rendering returns an embeddable SVG (and never leaks the secret),
-- CSRF token round-trip,
-- **server-side `role_required` gating** (anonymous → login, wrong role → 403,
-  right role → 200, deactivated user → logged out).
+- `test_security.py` —
+  - bcrypt password hashing and verification (salted, unique, rejects wrong/malformed),
+  - TOTP secret generation and code verification (accepts current, rejects wrong),
+  - TOTP QR rendering returns an embeddable SVG (and never leaks the secret),
+  - CSRF token round-trip,
+  - **server-side `role_required` gating** (anonymous → login, wrong role → 403,
+    right role → 200, deactivated user → logged out).
+- `test_telegram.py` —
+  - Mini App **`initData` HMAC** validation (valid, tampered, wrong token, stale),
+  - signed **link tokens** (round-trip, wrong secret, tampered, expired),
+  - sign-in code/token generation, `notify()` no-op safety,
+  - endpoint checks: Mini App page renders, `/api/telegram/me` rejects missing
+    `initData` (and is not blocked by CSRF).
 
 If Flask/SQLAlchemy are not installed, you can still validate every module
 compiles:

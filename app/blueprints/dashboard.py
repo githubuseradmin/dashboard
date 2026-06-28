@@ -18,6 +18,7 @@ from flask import (
     url_for,
 )
 
+from .. import telegram as tg
 from ..extensions import db
 from ..models import (
     ADMIN_ROLES,
@@ -32,6 +33,7 @@ from ..security import (
     generate_totp_secret,
     hash_password,
     login_required,
+    qr_svg,
     totp_qr_svg,
     verify_password,
     verify_totp,
@@ -41,6 +43,14 @@ dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
 
 # Session key holding a not-yet-confirmed TOTP secret during 2FA enrolment.
 _PENDING_TOTP_KEY = "pending_totp_secret"
+
+
+def _telegram_context() -> dict:
+    """Shared Telegram bits for the settings page (whether the feature is on)."""
+    return {
+        "telegram_configured": tg.is_configured(),
+        "telegram_bot": tg.bot_username(),
+    }
 
 
 def _is_htmx() -> bool:
@@ -119,13 +129,14 @@ def profile():
 @dashboard_bp.route("/settings")
 @login_required
 def settings():
-    """Settings hub: password change and 2FA management."""
+    """Settings hub: password change, 2FA and Telegram management."""
     user = current_user()
     return _render(
         "dashboard/settings.html",
         "partials/settings.html",
         user=user,
         active_tab="settings",
+        **_telegram_context(),
     )
 
 
@@ -148,6 +159,7 @@ def change_password():
         user.password_hash = hash_password(new)
         db.session.add(AuditLog(user_id=user.id, action="password_changed"))
         db.session.commit()
+        tg.notify(user, "🔑 Your password was just changed.")
         flash("Password changed successfully.", "success")
 
     return redirect(url_for("dashboard.settings"))
@@ -228,4 +240,97 @@ def two_factor_disable():
         db.session.commit()
         flash("Two-factor authentication has been disabled.", "success")
 
+    return redirect(url_for("dashboard.settings"))
+
+
+# ---------------------------------------------------------------------------
+# Telegram account management
+# ---------------------------------------------------------------------------
+@dashboard_bp.route("/settings/telegram/link", methods=["POST"])
+@login_required
+def telegram_link():
+    """Show a one-time deep link + QR to connect a Telegram account."""
+    user = current_user()
+    if not tg.is_configured():
+        flash("Telegram is not configured on this server.", "error")
+        return redirect(url_for("dashboard.settings"))
+    if user.telegram_linked:
+        flash("A Telegram account is already linked.", "info")
+        return redirect(url_for("dashboard.settings"))
+    if not tg.bot_username():
+        flash("The bot username is not configured; cannot build the link.", "error")
+        return redirect(url_for("dashboard.settings"))
+
+    token = tg.make_link_token(user.id)
+    link_url = f"https://t.me/{tg.bot_username()}?start={token}"
+
+    return _render(
+        "dashboard/settings.html",
+        "partials/settings.html",
+        user=user,
+        active_tab="settings",
+        link_url=link_url,
+        link_qr=qr_svg(link_url),
+        **_telegram_context(),
+    )
+
+
+@dashboard_bp.route("/settings/telegram/unlink", methods=["POST"])
+@login_required
+def telegram_unlink():
+    """Disconnect the linked Telegram account and turn its features off."""
+    user = current_user()
+    if user.telegram_linked:
+        tg.notify(user, "🔌 This account was unlinked from the dashboard.")
+        user.telegram_id = None
+        user.telegram_username = None
+        user.telegram_login_enabled = False
+        db.session.add(AuditLog(user_id=user.id, action="telegram_unlinked"))
+        db.session.commit()
+        flash("Telegram account unlinked.", "success")
+    else:
+        flash("No Telegram account is linked.", "info")
+    return redirect(url_for("dashboard.settings"))
+
+
+@dashboard_bp.route("/settings/telegram/login", methods=["POST"])
+@login_required
+def telegram_toggle_login():
+    """Enable/disable requiring a Telegram approval at sign-in."""
+    user = current_user()
+    if not user.telegram_linked:
+        flash("Link a Telegram account first.", "error")
+        return redirect(url_for("dashboard.settings"))
+    user.telegram_login_enabled = not user.telegram_login_enabled
+    db.session.add(
+        AuditLog(
+            user_id=user.id,
+            action="telegram_login_toggled",
+            detail="on" if user.telegram_login_enabled else "off",
+        )
+    )
+    db.session.commit()
+    flash(
+        "Telegram sign-in approval is now "
+        + ("enabled." if user.telegram_login_enabled else "disabled."),
+        "success",
+    )
+    return redirect(url_for("dashboard.settings"))
+
+
+@dashboard_bp.route("/settings/telegram/notify", methods=["POST"])
+@login_required
+def telegram_toggle_notify():
+    """Enable/disable Telegram account notifications."""
+    user = current_user()
+    if not user.telegram_linked:
+        flash("Link a Telegram account first.", "error")
+        return redirect(url_for("dashboard.settings"))
+    user.telegram_notify = not user.telegram_notify
+    db.session.commit()
+    flash(
+        "Telegram notifications are now "
+        + ("on." if user.telegram_notify else "off."),
+        "success",
+    )
     return redirect(url_for("dashboard.settings"))

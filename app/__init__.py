@@ -36,11 +36,13 @@ def _register_blueprints(app: Flask) -> None:
     from .blueprints.dashboard import dashboard_bp
     from .blueprints.admin import admin_bp
     from .blueprints.support import support_bp
+    from .blueprints.telegram import telegram_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(support_bp)
+    app.register_blueprint(telegram_bp)
 
 
 def _register_template_helpers(app: Flask) -> None:
@@ -71,6 +73,11 @@ def _register_csrf_protection(app: Flask) -> None:
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
             # CSRF can be globally disabled for the test suite.
             if app.config.get("WTF_CSRF_ENABLED", True) is False:
+                return
+            # The Telegram Mini App API authenticates each call via the
+            # WebApp initData HMAC (not a session cookie), so it is exempt
+            # from the session CSRF guard.
+            if request.path.startswith("/api/telegram/"):
                 return
             submitted = request.form.get("csrf_token") or request.headers.get(
                 "X-CSRFToken"

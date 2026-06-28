@@ -47,6 +47,19 @@ class BaseConfig:
     # Bcrypt cost factor (work rounds). Higher is slower and more secure.
     BCRYPT_ROUNDS = int(os.environ.get("BCRYPT_ROUNDS", "12"))
 
+    # --- Telegram integration (all optional) -------------------------------
+    # Leave TELEGRAM_BOT_TOKEN empty to disable every Telegram feature; the UI
+    # hides the options and the auth flow simply never offers Telegram login.
+    TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    # The bot's @username (without @), used to build t.me deep links.
+    TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "")
+    # Public HTTPS URL of the Mini App (defaults to this app's own /tg/app).
+    TELEGRAM_WEBAPP_URL = os.environ.get("TELEGRAM_WEBAPP_URL", "")
+    # How long a Telegram sign-in approval stays valid (seconds).
+    LOGIN_REQUEST_TTL = int(os.environ.get("LOGIN_REQUEST_TTL", "300"))
+    # How long an account-link deep link stays valid (seconds).
+    TELEGRAM_LINK_TTL = int(os.environ.get("TELEGRAM_LINK_TTL", "600"))
+
     TESTING = False
 
 

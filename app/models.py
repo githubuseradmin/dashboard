@@ -83,6 +83,19 @@ class User(Base):
     totp_secret: Mapped[Optional[str]] = mapped_column(sa.String(64), default=None)
     totp_enabled: Mapped[bool] = mapped_column(default=False)
 
+    # Telegram integration (optional). A linked Telegram account can approve
+    # sign-ins from the bot and receive account notifications.
+    #   * ``telegram_id``            -- the linked Telegram user id (None = unlinked)
+    #   * ``telegram_login_enabled`` -- require a Telegram approval at sign-in
+    #     (an alternative second factor; TOTP takes precedence when both are on)
+    #   * ``telegram_notify``        -- opt in to security/account notifications
+    telegram_id: Mapped[Optional[int]] = mapped_column(
+        sa.BigInteger, unique=True, index=True, default=None
+    )
+    telegram_username: Mapped[Optional[str]] = mapped_column(sa.String(64), default=None)
+    telegram_login_enabled: Mapped[bool] = mapped_column(default=False)
+    telegram_notify: Mapped[bool] = mapped_column(default=True)
+
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
     tickets: Mapped[list["SupportTicket"]] = relationship(
@@ -111,6 +124,11 @@ class User(Base):
 
     def has_role(self, *roles: Role) -> bool:
         return self.role in roles
+
+    @property
+    def telegram_linked(self) -> bool:
+        """True when a Telegram account is connected to this user."""
+        return self.telegram_id is not None
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid only
         return f"<User {self.username!r} role={self.role.value}>"
@@ -183,3 +201,60 @@ class AuditLog(Base):
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid only
         return f"<AuditLog {self.action!r} user={self.user_id}>"
+
+
+class LoginRequestStatus(str, enum.Enum):
+    """Lifecycle of a Telegram sign-in approval request."""
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    DENIED = "denied"
+
+
+class LoginRequest(Base):
+    """A pending Telegram-approved sign-in.
+
+    Created by the web app after a correct password when the user has Telegram
+    login enabled. The bot (a separate process) flips ``status`` to approved or
+    denied via the inline buttons; alternatively the user can type ``code`` on
+    the waiting page. The web app polls this row until it resolves or expires.
+    """
+
+    __tablename__ = "login_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    # Short opaque token carried in the bot's callback buttons (kept well under
+    # Telegram's 64-byte callback_data limit).
+    token: Mapped[str] = mapped_column(sa.String(64), unique=True, index=True)
+    # Six-digit fallback code the user can type on the waiting page.
+    code: Mapped[str] = mapped_column(sa.String(6))
+    status: Mapped[LoginRequestStatus] = mapped_column(
+        sa.Enum(LoginRequestStatus, native_enum=False, length=20),
+        default=LoginRequestStatus.PENDING,
+    )
+    # Captured context shown in the Telegram prompt so the user can spot an
+    # unexpected sign-in attempt.
+    ip: Mapped[Optional[str]] = mapped_column(sa.String(64), default=None)
+    user_agent: Mapped[Optional[str]] = mapped_column(sa.String(255), default=None)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
+    expires_at: Mapped[datetime] = mapped_column()
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(default=None)
+
+    user: Mapped["User"] = relationship()
+
+    @property
+    def is_expired(self) -> bool:
+        """True once the request's TTL has elapsed (tz-robust across backends)."""
+        exp = self.expires_at
+        if exp.tzinfo is not None:
+            exp = exp.astimezone(timezone.utc).replace(tzinfo=None)
+        return datetime.now(timezone.utc).replace(tzinfo=None) >= exp
+
+    @property
+    def is_actionable(self) -> bool:
+        """Still pending and not yet expired -> may be approved or denied."""
+        return self.status == LoginRequestStatus.PENDING and not self.is_expired
+
+    def __repr__(self) -> str:  # pragma: no cover - debug aid only
+        return f"<LoginRequest #{self.id} user={self.user_id} {self.status.value}>"

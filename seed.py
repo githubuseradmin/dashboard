@@ -20,6 +20,7 @@ import sqlalchemy as sa  # noqa: E402
 
 from app import create_app  # noqa: E402
 from app.extensions import db  # noqa: E402
+from app.migrate import ensure_schema  # noqa: E402
 from app.models import Role, SupportTicket, TicketMessage, TicketStatus, User  # noqa: E402
 from app.security import hash_password  # noqa: E402
 
@@ -60,7 +61,11 @@ def _get_or_create_user(username, email, password, role, display_name):
 def seed() -> None:
     app = create_app()
     with app.app_context():
-        db.create_all()
+        # Create new tables and add any columns missing from an older database
+        # (e.g. the Telegram fields), so re-seeding upgrades the schema in place.
+        added = ensure_schema(db.engine)
+        if added:
+            print("Schema upgraded; added columns:", ", ".join(added))
 
         admin, admin_created = _get_or_create_user(
             ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD, Role.ADMIN, "Site Admin"

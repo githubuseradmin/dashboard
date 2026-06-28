@@ -108,6 +108,18 @@ def totp_qr_svg(secret: str, account_name: str, issuer: str) -> str:
     return buffer.getvalue().decode("utf-8")
 
 
+def qr_svg(data: str) -> str:
+    """Return an inline SVG QR code (as a string) encoding ``data``.
+
+    Generic counterpart to ``totp_qr_svg`` -- used e.g. for the Telegram
+    account-link deep link. ``xmldecl=False`` keeps it embeddable in HTML.
+    """
+    qr = segno.make(data, error="m")
+    buffer = io.BytesIO()
+    qr.save(buffer, kind="svg", xmldecl=False, scale=4, border=2)
+    return buffer.getvalue().decode("utf-8")
+
+
 def verify_totp(secret: str, code: str) -> bool:
     """Validate a 6-digit TOTP ``code`` against ``secret``.
 

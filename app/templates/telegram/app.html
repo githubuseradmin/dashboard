@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ app_name }} &middot; Mini App</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <style>
+    /* Mini App is a single scrolling column inside Telegram. */
+    .tg-app { max-width: 560px; margin: 0 auto; padding: 1rem; }
+    .tg-app .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .6rem; }
+    .tg-app .stat { border: 1px solid var(--border, #e3e3e3); border-radius: 12px; padding: .7rem .8rem; }
+    .tg-app .stat__v { font-size: 1.25rem; font-weight: 700; }
+    .tg-app .stat__k { font-size: .75rem; opacity: .7; text-transform: uppercase; letter-spacing: .05em; }
+    .tg-app .row { display: flex; gap: .5rem; align-items: center; justify-content: space-between; }
+    .tg-app .list { list-style: none; margin: .4rem 0 0; padding: 0; }
+    .tg-app .list li { padding: .45rem 0; border-top: 1px solid var(--border, #eee); font-size: .9rem; }
+    .tg-app .pending { border: 1px solid var(--warn, #d98c00); border-radius: 12px; padding: .7rem .8rem; margin-bottom: .6rem; }
+    .tg-app .btns { display: flex; gap: .5rem; margin-top: .5rem; }
+    .tg-app .btns .btn { flex: 1; }
+  </style>
+</head>
+<body>
+  <main class="tg-app" id="app">
+    <p class="muted" id="status">Loading&hellip;</p>
+  </main>
+
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    (function () {
+      "use strict";
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) {
+        tg.ready();
+        tg.expand();
+        // Follow Telegram's light/dark theme.
+        document.documentElement.setAttribute(
+          "data-theme", tg.colorScheme === "dark" ? "dark" : "light"
+        );
+      }
+      var initData = (tg && tg.initData) || "";
+      var app = document.getElementById("app");
+
+      function el(tag, cls, text) {
+        var n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (text != null) n.textContent = text;
+        return n;
+      }
+
+      function api(path, body) {
+        return fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(Object.assign({ initData: initData }, body || {}))
+        }).then(function (r) { return r.json().catch(function () { return { ok: false }; }); });
+      }
+
+      function decide(token, decision, btnWrap) {
+        btnWrap.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
+        api("/api/telegram/approve", { token: token, decision: decision })
+          .then(function () { load(); });
+      }
+
+      function render(d) {
+        app.innerHTML = "";
+        if (!d || !d.ok) {
+          app.appendChild(el("p", "muted",
+            "Could not verify this Mini App session. Open it from the bot inside Telegram."));
+          return;
+        }
+
+        // Header
+        var head = el("div", "card");
+        var h = el("h1", "page-title", d.user.name);
+        head.appendChild(h);
+        head.appendChild(el("p", "muted",
+          d.user.role + (d.user.telegram_username ? " · @" + d.user.telegram_username : "")));
+        app.appendChild(head);
+
+        // Pending sign-in approvals
+        (d.pending_logins || []).forEach(function (p) {
+          var box = el("div", "pending");
+          box.appendChild(el("div", "row", ""));
+          box.firstChild.appendChild(el("strong", null, "Sign-in request"));
+          box.appendChild(el("p", "muted", "IP: " + (p.ip || "unknown")));
+          var btns = el("div", "btns");
+          var ok = el("button", "btn btn--primary", "Confirm");
+          var no = el("button", "btn btn--danger", "Deny");
+          ok.onclick = function () { decide(p.token, "approve", btns); };
+          no.onclick = function () { decide(p.token, "deny", btns); };
+          btns.appendChild(ok); btns.appendChild(no);
+          box.appendChild(btns);
+          app.appendChild(box);
+        });
+
+        // Stats
+        var statsCard = el("div", "card");
+        statsCard.appendChild(el("h2", "card__title", "Overview"));
+        var grid = el("div", "stat-grid");
+        [
+          ["Open tickets", d.stats.open_tickets],
+          ["Role", d.stats.role],
+          ["2FA", d.stats.two_factor ? "On" : "Off"],
+          ["Notifications", d.stats.notify ? "On" : "Off"]
+        ].forEach(function (kv) {
+          var s = el("div", "stat");
+          s.appendChild(el("div", "stat__v", String(kv[1])));
+          s.appendChild(el("div", "stat__k", kv[0]));
+          grid.appendChild(s);
+        });
+        statsCard.appendChild(grid);
+        app.appendChild(statsCard);
+
+        // Recent activity
+        var act = el("div", "card");
+        act.appendChild(el("h2", "card__title", "Recent activity"));
+        if (!d.events || !d.events.length) {
+          act.appendChild(el("p", "muted", "Nothing yet."));
+        } else {
+          var ul = el("ul", "list");
+          d.events.forEach(function (e) {
+            var li = el("li", null, e.action + (e.detail ? " — " + e.detail : ""));
+            ul.appendChild(li);
+          });
+          act.appendChild(ul);
+        }
+        app.appendChild(act);
+      }
+
+      function load() {
+        api("/api/telegram/me").then(render).catch(function () {
+          app.innerHTML = "";
+          app.appendChild(el("p", "muted", "Network error. Please try again."));
+        });
+      }
+
+      load();
+    })();
+  </script>
+</body>
+</html>
