@@ -47,8 +47,9 @@ templates.
   closed).
 - **Security done right** — bcrypt hashes, **CSRF protection on every form**
   (manual signed token, also sent via the `X-CSRFToken` header for HTMX),
-  hardened session cookies (HttpOnly, SameSite=Lax, optional Secure),
-  parameterized queries via SQLAlchemy, friendly 400/403/404 pages.
+  **login rate limiting with temporary lockout**, hardened session cookies
+  (HttpOnly, SameSite=Lax, optional Secure), parameterized queries via
+  SQLAlchemy, friendly 400/403/404 pages.
 - **DB-agnostic** — SQLite by default; switch to MySQL with a single env var.
 - **Light/dark theme** — toggle persisted in `localStorage`; works without JS.
 
@@ -110,6 +111,7 @@ dashboard/
 │   ├── migrate.py             # ensure_schema(): create tables + add new columns
 │   ├── models.py              # User, SupportTicket, TicketMessage, AuditLog, LoginRequest
 │   ├── security.py            # Hashing, TOTP, CSRF, login_required/role_required
+│   ├── ratelimit.py           # In-memory login throttle (sliding window + lockout)
 │   ├── telegram.py            # Telegram helpers: initData HMAC, link tokens, send
 │   ├── blueprints/
 │   │   ├── auth.py            # register / login (+2FA / +Telegram) / logout
@@ -285,6 +287,8 @@ All settings are environment-driven (see `.env.example`):
 | `DATABASE_URL`          | `sqlite:///dashboard.db`  | Any SQLAlchemy URL (SQLite, MySQL, …).             |
 | `APP_NAME`              | `Dashboard`               | Shown in the UI and used as the 2FA issuer.        |
 | `BCRYPT_ROUNDS`         | `12`                      | bcrypt work factor (cost).                         |
+| `LOGIN_MAX_ATTEMPTS`    | `5`                       | Failed sign-ins per identifier before lockout.     |
+| `LOGIN_LOCKOUT_SECONDS` | `300`                     | Lockout window (sliding) after too many failures.  |
 | `SESSION_COOKIE_SECURE` | `false` (dev)             | Set `true` behind HTTPS to mark cookies Secure.    |
 | `SESSION_LIFETIME_DAYS` | `7`                       | Session lifetime.                                  |
 | `HOST` / `PORT`         | `127.0.0.1` / `5000`      | Dev server bind address.                           |
@@ -331,6 +335,14 @@ behind HTTPS.
 - **2FA secrets** are stored only as the base32 shared secret and never rendered
   into logs. The setup page shows a QR for the standard `otpauth://` URI plus a
   manual key; the secret never leaves the server in any other form.
+- **Login rate limiting**: repeated failed sign-ins for the same identifier are
+  counted in a sliding window (`app/ratelimit.py`). After `LOGIN_MAX_ATTEMPTS`
+  failures within `LOGIN_LOCKOUT_SECONDS` the identifier is temporarily locked
+  and further attempts are rejected *before* the password is verified (no bcrypt
+  oracle for attackers), with the lockout audit-logged. A successful login
+  clears the counter. The throttle is in-memory and single-process (fine for
+  this dev app); a multi-worker production deployment should back it with a
+  shared store such as Redis.
 - **CSRF**: every state-changing request (`POST`/`PUT`/`PATCH`/`DELETE`) must
   carry a per-session signed token, validated in a `before_request` hook. HTMX
   requests send it via the `X-CSRFToken` header.

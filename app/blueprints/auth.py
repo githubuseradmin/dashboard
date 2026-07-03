@@ -21,6 +21,7 @@ from flask import (
 from .. import telegram as tg
 from ..extensions import db
 from ..models import AuditLog, LoginRequest, LoginRequestStatus, Role, User
+from ..ratelimit import throttle
 from ..security import (
     PENDING_2FA_KEY,
     current_user,
@@ -56,6 +57,17 @@ def _record(action: str, user_id: int | None = None, detail: str | None = None) 
     db.session.commit()
 
 
+def _clear_throttle(user: User) -> None:
+    """Forget login-failure history for a user who just fully signed in.
+
+    Clears by both email and username (lowercased) since the user may have
+    typed either identifier on the login form.
+    """
+    for key in (user.email, user.username):
+        if key:
+            throttle.clear(key.strip().lower())
+
+
 def _notify_signin(user: User) -> None:
     """Best-effort Telegram security notice on a successful sign-in."""
     app_name = current_app.config.get("APP_NAME", "Dashboard")
@@ -69,6 +81,7 @@ def _notify_signin(user: User) -> None:
 def _finish_login(user: User, next_target: str | None):
     """Complete a successful single-factor login."""
     login_user(user)
+    _clear_throttle(user)
     _record("login", user.id)
     _notify_signin(user)
     flash(f"Welcome back, {user.name}.", "success")
@@ -189,6 +202,18 @@ def login():
         identifier = request.form.get("identifier", "").strip().lower()
         password = request.form.get("password", "")
 
+        # Rate limiting: reject a locked identifier BEFORE touching the
+        # password so an attacker cannot keep the bcrypt-verify oracle warm.
+        remaining = throttle.seconds_remaining(identifier)
+        if remaining > 0:
+            _record("login_locked", None, f"{identifier} ({remaining}s)")
+            flash(
+                f"Too many attempts, try again in {remaining} seconds.", "error"
+            )
+            return render_template(
+                "auth/login.html", identifier=identifier, next=next_target
+            )
+
         # Allow login by either email or username.
         user = db.session.scalar(
             sa.select(User).where(
@@ -205,12 +230,20 @@ def login():
             or not verify_password(password, user.password_hash)
         ):
             # Identical message and timing path for every failure mode so we
-            # do not leak which accounts exist.
+            # do not leak which accounts exist. Count the failure so repeated
+            # attempts on this identifier eventually trip the lockout.
+            throttle.record_failure(identifier)
             _record("login_failed", user.id if user else None, identifier)
             flash("Invalid credentials, or the account is inactive.", "error")
             return render_template(
                 "auth/login.html", identifier=identifier, next=next_target
             )
+
+        # First factor passed: forget the failure history for this identifier.
+        # Second-factor completion paths (TOTP / Telegram) also clear on success
+        # by identifier stored below, but the password having verified is the
+        # meaningful "not an attacker" signal, so we clear here too.
+        throttle.clear(identifier)
 
         if user.totp_enabled:
             # First factor passed; stash the pending user and ask for the code.
@@ -247,6 +280,7 @@ def two_factor():
         if verify_totp(user.totp_secret or "", code):
             next_target = session.get("pending_next")
             login_user(user)  # clears the pending markers via session.clear()
+            _clear_throttle(user)
             _record("login_2fa", user.id)
             _notify_signin(user)
             flash(f"Welcome back, {user.name}.", "success")
@@ -285,6 +319,7 @@ def telegram_status():
             return _tg_redirect(url_for("auth.login"))
         next_target = session.get("pending_next")
         login_user(user)  # clears pending markers via session.clear()
+        _clear_throttle(user)
         _record("login_telegram", user.id)
         _notify_signin(user)
         flash(f"Welcome back, {user.name}.", "success")
@@ -331,6 +366,7 @@ def telegram_code():
             return redirect(url_for("auth.login"))
         next_target = session.get("pending_next")
         login_user(user)
+        _clear_throttle(user)
         _record("login_telegram_code", user.id)
         _notify_signin(user)
         flash(f"Welcome back, {user.name}.", "success")

@@ -22,6 +22,11 @@ def create_app(config_name: str | None = None) -> Flask:
     # Bind extensions to this app instance.
     db.init_app(app)
 
+    # Point the login throttle at this app's configured limits.
+    from .ratelimit import configure_from_app
+
+    configure_from_app(app.config)
+
     _register_blueprints(app)
     _register_template_helpers(app)
     _register_csrf_protection(app)

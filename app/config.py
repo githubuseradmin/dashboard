@@ -47,6 +47,13 @@ class BaseConfig:
     # Bcrypt cost factor (work rounds). Higher is slower and more secure.
     BCRYPT_ROUNDS = int(os.environ.get("BCRYPT_ROUNDS", "12"))
 
+    # --- Login rate limiting ----------------------------------------------
+    # After LOGIN_MAX_ATTEMPTS failed sign-ins for the same identifier within
+    # LOGIN_LOCKOUT_SECONDS, further attempts are rejected until the window
+    # clears. See app/ratelimit.py (in-memory; single-process only).
+    LOGIN_MAX_ATTEMPTS = int(os.environ.get("LOGIN_MAX_ATTEMPTS", "5"))
+    LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "300"))
+
     # --- Telegram integration (all optional) -------------------------------
     # Leave TELEGRAM_BOT_TOKEN empty to disable every Telegram feature; the UI
     # hides the options and the auth flow simply never offers Telegram login.
