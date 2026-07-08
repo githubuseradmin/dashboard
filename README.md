@@ -2,6 +2,11 @@ English | [Русский](README.ru.md)
 
 # Dashboard
 
+![CI](https://github.com/githubuseradmin/dashboard/actions/workflows/ci.yml/badge.svg)
+![tests](https://img.shields.io/badge/tests-47_passing-brightgreen)
+![license](https://img.shields.io/badge/license-MIT-blue)
+![python](https://img.shields.io/badge/python-3.10%2B-blue)
+
 A polished, modern-but-simple full-stack web **dashboard with authentication**,
 built to be a realistic starter you can actually build on. It ships a complete
 account system (registration, login, optional TOTP two-factor authentication),
@@ -398,4 +403,5 @@ python -m py_compile $(git ls-files '*.py')   # or pass the .py paths explicitly
 
 ## License
 
-Provided as a starter/demo. Use it freely as a foundation for your own project.
+Released under the **MIT License** — see [LICENSE](LICENSE). Use it freely as a
+foundation for your own project.

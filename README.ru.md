@@ -2,6 +2,11 @@
 
 # Dashboard (Панель управления)
 
+![CI](https://github.com/githubuseradmin/dashboard/actions/workflows/ci.yml/badge.svg)
+![tests](https://img.shields.io/badge/tests-47_passing-brightgreen)
+![license](https://img.shields.io/badge/license-MIT-blue)
+![python](https://img.shields.io/badge/python-3.10%2B-blue)
+
 Аккуратная, современная, но простая full-stack веб-**панель управления с
 аутентификацией**, созданная как реалистичный стартовый шаблон, на котором
 действительно можно строить проект. Включает полноценную систему аккаунтов
@@ -407,5 +412,5 @@ python -m py_compile $(git ls-files '*.py')   # или передайте пут
 
 ## Лицензия
 
-Предоставляется как стартовый шаблон/демо. Свободно используйте его как основу
-для собственного проекта.
+Распространяется под **лицензией MIT** — см. [LICENSE](LICENSE). Свободно
+используйте его как основу для собственного проекта.
